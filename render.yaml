@@ -1,0 +1,58 @@
+# Hermes gateway on Render — free tier.
+#
+# Runs the Telegram gateway on Render's infrastructure instead of on the phone.
+# After this, the phone can be off, Termux uninstalled, and you still get replies.
+#
+# ── HOW TO DEPLOY (the human does these 3 steps; everything else is done) ──
+#
+# 1. Push this deploy/ directory to any GitHub repo (or use Render's manual
+#    deploy by uploading the repo URL).
+# 2. Render Dashboard -> New -> Blueprint -> select the repo -> Apply.
+#    Render reads render.yaml and creates the service.
+# 3. Render asks for the secret env vars (all marked sync: false). Paste each
+#    value from deploy/SECRETS_TEMPLATE.md. All are free, none need a card.
+#
+# ── WHY A WORKER, NOT A WEB SERVICE ──
+# A Telegram bot polls Telegram; it does not serve inbound HTTP. A `worker`
+# service has no public port, no cold-start DNS delay, and uses less quota.
+#
+# ── COST ──
+# Free tier: no card, ~750 hrs/month. Worker sleeps after 15 min idle and wakes
+# in ~60s on the next message. Conversation history is persisted to disk, so
+# nothing is lost across sleeps.
+
+services:
+  - type: worker
+    name: hermes-gateway
+    runtime: docker
+    plan: free
+    region: singapore          # closest to India -> lowest Telegram latency
+    # dockerfilePath is relative to the REPO ROOT (not to dockerContext).
+    # dockerContext is the build context sent to the builder.
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: ./deploy
+    # No healthCheckPath: a Telegram worker has no HTTP listener. Setting one
+    # makes Render probe a dead port and mark the service unhealthy.
+    envVars:
+      # ── Telegram (required) ──
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_ALLOWED_USERS
+        sync: false
+      - key: TELEGRAM_HOME_CHANNEL
+        sync: false
+      # ── Model providers (fallback chain) ──
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      # ── Research ──
+      - key: EXA_API_KEY
+        sync: false
+      # ── Agent behaviour ──
+      - key: HERMES_MAX_TURNS
+        value: "400"
+      - key: PYTHONUNBUFFERED
+        value: "1"
